@@ -104,8 +104,45 @@ def step(text):     print(f"{C.DIM}    → {text}{C.RESET}")
 
 
 # ─── Utility ───────────────────────────────────────────────────────────────────
+import ipaddress
+
 def is_cloudflare(ip: str) -> bool:
-    return any(ip.startswith(r) for r in CLOUDFLARE_RANGES)
+    try:
+        ip_obj = ipaddress.ip_address(ip)
+
+        cf_networks = [
+            "173.245.48.0/20",
+            "103.21.244.0/22",
+            "103.22.200.0/22",
+            "103.31.4.0/22",
+            "141.101.64.0/18",
+            "108.162.192.0/18",
+            "190.93.240.0/20",
+            "188.114.96.0/20",
+            "197.234.240.0/22",
+            "198.41.128.0/17",
+            "162.158.0.0/15",
+            "104.16.0.0/13",
+            "104.24.0.0/14",
+            "172.64.0.0/13",
+            "131.0.72.0/22",
+            "2400:cb00::/32",
+            "2606:4700::/32",
+            "2803:f800::/32",
+            "2405:b500::/32",
+            "2405:8100::/32",
+            "2a06:98c0::/29",
+            "2c0f:f248::/32"
+        ]
+
+        for network in cf_networks:
+            if ip_obj in ipaddress.ip_network(network):
+                return True
+
+        return False
+
+    except Exception:
+        return False
 
 def extract_ips(text: str) -> list:
     pattern = r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b'
@@ -314,17 +351,23 @@ def module_dns_leak(domain: str, store: ResultStore):
     except Exception as e:
         warn(f"A record query failed: {e}")
 
-    # AAAA Records (IPv6 — often NOT behind CDN)
-    info("Querying AAAA (IPv6) records...")
-    try:
-        answers = resolver.resolve(domain, "AAAA")
-        for rdata in answers:
-            ip = str(rdata)
-            found(f"IPv6 AAAA Record: {ip} — LIKELY ORIGIN (CDN often skips IPv6)")
-            store.add_candidate(ip, "DNS-AAAA", "IPv6 record — bypasses CDN")
-            store.add_finding("DNS Leak", f"AAAA (IPv6) record: {ip}")
-    except Exception:
-        step("No AAAA records found")
+  # AAAA Records
+info("Querying AAAA (IPv6) records...")
+try:
+    answers = resolver.resolve(domain, "AAAA")
+    for rdata in answers:
+        ip = str(rdata)
+
+        if is_cloudflare(ip):
+            step(f"AAAA: {ip} → Cloudflare IPv6 (skip)")
+            continue
+
+        found(f"IPv6 AAAA Record: {ip}")
+        store.add_candidate(ip, "DNS-AAAA", "IPv6 record")
+        store.add_finding("DNS Leak", f"AAAA (IPv6) record: {ip}")
+
+except Exception:
+    step("No AAAA records found")
 
     # MX Records
     info("Querying MX records...")
