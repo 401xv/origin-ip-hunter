@@ -710,10 +710,15 @@ def module_subdomain(domain: str, store: ResultStore):
                         else:
                             step(f"{fqdn} → {ip} (CF)")
                 if ipv6:
-                    for ip in ipv6:
-                        found(f"IPv6 subdomain: {fqdn} → {ip}")
-                        store.add_candidate(ip, "Sub-IPv6", f"IPv6 subdomain: {fqdn}")
-                        store.add_finding("Subdomain", f"IPv6 {fqdn} → {ip}")
+    for ip in ipv6:
+
+        if is_cloudflare(ip):
+            step(f"{fqdn} → {ip} (CF IPv6)")
+            continue
+
+        found(f"IPv6 subdomain: {fqdn} → {ip}")
+        store.add_candidate(ip, "Sub-IPv6", f"IPv6 subdomain: {fqdn}")
+        store.add_finding("Subdomain", f"IPv6 {fqdn} → {ip}")
             except Exception:
                 pass
 
